@@ -1,0 +1,12 @@
+ALTER TABLE patients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE patients FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY patients_tenant_isolation ON patients
+USING (
+    tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid
+)
+WITH CHECK (
+    tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid
+);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON patients TO app_user;
