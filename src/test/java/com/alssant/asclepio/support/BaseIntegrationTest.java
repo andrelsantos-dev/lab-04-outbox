@@ -23,9 +23,6 @@ public abstract class BaseIntegrationTest {
             .withDatabaseName("dbRLSTest")
             .withInitScript("db/init/00-test-init.sql");
 
-    @Autowired
-    protected JdbcTemplate jdbcTemplate;
-
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         String jdbcUrl = postgres.getJdbcUrl();

@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/asclepio_lab
+    username: app_user
+    password: app_password
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+  flyway:
+    enabled: true
+    url: jdbc:postgresql://localhost:5432/asclepio_lab
+    user: migration_user
+    password: migration_password
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        highlight_sql: true
+    hibernate:
+      ddl-auto: validate

@@ -18,9 +18,9 @@ Goals:
 
 ## Previous Labs
 
-* Lab 01 — Project Bootstrap
-* Lab 02 — Tenant Context Propagation
-* Lab 03 — Multi-tenancy with PostgreSQL Row Level Security (RLS)
+* Lab 01 - Flyway + Testcontainers
+* Lab 02 - PostgreSQL Row Level Security
+* Lab 03 — Multi-Tenant System with PostgreSQL RLS
 
 ---
 
@@ -55,6 +55,22 @@ src
 ├── tenant
 ├── config
 └── integration
+```
+
+---
+
+## Run locally
+
+Start local infrastructure:
+
+```bash
+make up
+```
+
+Run the application using the `dev` profile:
+
+```bash
+make dev
 ```
 
 ---
