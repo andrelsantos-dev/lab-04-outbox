@@ -1,13 +1,14 @@
 package com.alssant.asclepio.support;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.alssant.asclepio.tenant.TenantContext;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.util.function.Supplier;
 
 @SpringBootTest
 @Testcontainers
@@ -34,6 +35,15 @@ public abstract class BaseIntegrationTest {
         registry.add("spring.datasource.url", () -> jdbcUrl);
         registry.add("spring.datasource.username", () -> APP_USER);
         registry.add("spring.datasource.password", () -> "app_password");
+    }
+
+    protected  <T> T executeAsTenant(String tenantId, Supplier<T> action) {
+        try {
+            TenantContext.setTenantId(tenantId);
+            return action.get();
+        } finally {
+            TenantContext.clear();
+        }
     }
 
 }

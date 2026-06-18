@@ -23,12 +23,12 @@ public class PatientController {
     }
 
     @PostMapping()
-    public ResponseEntity<Void> createPatient(@RequestBody CreatePatientRequest request) {
-        patientService.create(request);
+    public ResponseEntity<PatientResponse> createPatient(@RequestBody CreatePatientRequest request) {
+        PatientResponse response = patientService.create(request);
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .build();
+                .body(response);
 
     }
 

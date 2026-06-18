@@ -1,18 +1,25 @@
 package com.alssant.asclepio.integration;
 
+import com.alssant.asclepio.outbox.OutboxEvent;
+import com.alssant.asclepio.outbox.OutboxService;
+import com.alssant.asclepio.outbox.dto.EventType;
+import com.alssant.asclepio.patient.dto.PatientResponse;
 import com.alssant.asclepio.support.BaseIntegrationTest;
+import com.alssant.asclepio.tenant.TenantContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -23,6 +30,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public class PatientIntegrationTest extends BaseIntegrationTest {
     @Autowired
     MockMvc mockMvc;
+
+    @Autowired
+    ObjectMapper mapper;
+
+    @Autowired
+    OutboxService outboxService;
+
 
     @Test
     void shouldFilterPatientsByHeader()
@@ -190,6 +204,37 @@ public class PatientIntegrationTest extends BaseIntegrationTest {
                                         )
                                 )));
 
+    }
+
+    @Test
+    void shouldCreatePatientAndOutboxEvent() throws Exception {
+        MvcResult result = mockMvc.perform(post("/patients")
+                        .header("X-Tenant-Id", TENANT_A)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                    {
+                      "name": "CLIENT NEW"
+                    }
+                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        PatientResponse response =
+                mapper.readValue(
+                        result.getResponse().getContentAsString(),
+                        PatientResponse.class
+                );
+
+        OutboxEvent event =
+                executeAsTenant(
+                        TENANT_A,
+                        () -> outboxService
+                                .findByAggregateId(response.id())
+                                .orElseThrow()
+                );
+
+        assertEquals(EventType.PATIENT_CREATED, event.getEventType());
+        assertEquals(response.id(), event.getAggregateId());
     }
 
 }

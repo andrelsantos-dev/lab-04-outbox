@@ -1,5 +1,9 @@
 package com.alssant.asclepio.patient;
 
+import com.alssant.asclepio.outbox.OutboxService;
+import com.alssant.asclepio.outbox.dto.EventMetadata;
+import com.alssant.asclepio.outbox.dto.EventType;
+import com.alssant.asclepio.outbox.dto.PatientCreatedEvent;
 import com.alssant.asclepio.patient.dto.CreatePatientRequest;
 import com.alssant.asclepio.patient.dto.PatientResponse;
 import com.alssant.asclepio.tenant.TenantContext;
@@ -12,9 +16,11 @@ import java.util.List;
 @Service
 public class PatientService {
     private final PatientRepository repository;
+    private final OutboxService outboxService;
 
-    public PatientService(PatientRepository repository) {
+    public PatientService(PatientRepository repository, OutboxService outboxService) {
         this.repository = repository;
+        this.outboxService = outboxService;
     }
 
     @Transactional(readOnly = true)
@@ -31,7 +37,7 @@ public class PatientService {
     }
 
     @Transactional
-    public void create(CreatePatientRequest request) {
+    public PatientResponse create(CreatePatientRequest request) {
         if (!StringUtils.hasText(TenantContext.getTenantId())) {
             throw new IllegalStateException("Tenant not set");
         }
@@ -40,6 +46,16 @@ public class PatientService {
             throw new IllegalStateException("Name not set");
         }
 
-        repository.save(new Patient(request.name()));
+        Patient p = repository.save(new Patient(request.name()));
+        outboxService
+                .record(
+                        new PatientCreatedEvent(p.getId(), p.getName()),
+                        new EventMetadata(EventType.PATIENT_CREATED, p.getId(), "PATIENT"));
+
+        return new PatientResponse(
+                p.getId(),
+                p.getTenantId(),
+                p.getName()
+        );
     }
 }

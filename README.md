@@ -82,3 +82,11 @@ make dev
 * Real integration tests over mocks
 * Database as source of truth
 * Progressive architecture evolution
+
+### Testing with RLS
+
+Integration tests that validate persisted data after HTTP requests may require opening a new tenant context.
+
+This happens because PostgreSQL Row Level Security relies on connection session state (`app.current_tenant`), while test assertions execute in a separate transaction and connection.
+
+For this reason, tests use a small helper (`executeAsTenant`) to recreate the tenant context for post-request validations.
