@@ -1,0 +1,4 @@
+worker:
+  datasource:
+    username: worker_user
+    password: worker_password

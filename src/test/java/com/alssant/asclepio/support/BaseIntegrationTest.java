@@ -2,6 +2,7 @@ package com.alssant.asclepio.support;
 
 import com.alssant.asclepio.tenant.TenantContext;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -12,6 +13,7 @@ import java.util.function.Supplier;
 
 @SpringBootTest
 @Testcontainers
+@ActiveProfiles("test")
 public abstract class BaseIntegrationTest {
     protected static final String APP_USER = "app_user";
     protected static final String MIGRATION_USER = "migration_user";

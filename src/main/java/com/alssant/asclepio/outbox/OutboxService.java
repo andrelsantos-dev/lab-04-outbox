@@ -21,6 +21,10 @@ public class OutboxService {
         return repository.findByAggregateId(aggregateId);
     }
 
+    public void save(OutboxEvent event) {
+        repository.save(event);
+    }
+
     public <T> void record(T payload, EventMetadata metadata) {
 
         OutboxEvent event = new OutboxEvent();

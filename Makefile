@@ -31,3 +31,6 @@ status: ## Show container status.
 
 dev: ## Run application using dev profile
 	./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+
+test: ## Run tests
+	./mvnw clean test

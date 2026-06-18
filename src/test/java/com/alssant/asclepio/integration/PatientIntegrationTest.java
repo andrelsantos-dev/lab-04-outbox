@@ -2,22 +2,28 @@ package com.alssant.asclepio.integration;
 
 import com.alssant.asclepio.outbox.OutboxEvent;
 import com.alssant.asclepio.outbox.OutboxService;
+import com.alssant.asclepio.outbox.OutboxWorker;
+import com.alssant.asclepio.outbox.OutboxWorkerRepository;
 import com.alssant.asclepio.outbox.dto.EventType;
 import com.alssant.asclepio.patient.dto.PatientResponse;
 import com.alssant.asclepio.support.BaseIntegrationTest;
-import com.alssant.asclepio.tenant.TenantContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.util.Optional;
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -27,6 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 public class PatientIntegrationTest extends BaseIntegrationTest {
     @Autowired
     MockMvc mockMvc;
@@ -36,6 +43,12 @@ public class PatientIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     OutboxService outboxService;
+
+    @Autowired
+    OutboxWorkerRepository workerRepository;
+
+    @Autowired
+    OutboxWorker outboxWorker;
 
 
     @Test
@@ -212,10 +225,10 @@ public class PatientIntegrationTest extends BaseIntegrationTest {
                         .header("X-Tenant-Id", TENANT_A)
                         .contentType(APPLICATION_JSON)
                         .content("""
-                    {
-                      "name": "CLIENT NEW"
-                    }
-                """))
+                                    {
+                                      "name": "CLIENT NEW"
+                                    }
+                                """))
                 .andExpect(status().isCreated())
                 .andReturn();
 
@@ -235,6 +248,65 @@ public class PatientIntegrationTest extends BaseIntegrationTest {
 
         assertEquals(EventType.PATIENT_CREATED, event.getEventType());
         assertEquals(response.id(), event.getAggregateId());
+    }
+
+    @Test
+    void shouldFindPendingEvents() throws Exception {
+
+        MvcResult result = mockMvc.perform(post("/patients")
+                        .header("X-Tenant-Id", TENANT_A)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                    {
+                                      "name": "CLIENT PENDING"
+                                    }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        PatientResponse response =
+                mapper.readValue(
+                        result.getResponse().getContentAsString(),
+                        PatientResponse.class
+                );
+
+        List<OutboxEvent> events = workerRepository.findPending();
+        assertFalse(events.isEmpty());
+
+        OutboxEvent pendingClient = workerRepository.findPending()
+                .stream()
+                .filter(event -> response.id().equals(event.getAggregateId()))
+                .findFirst()
+                .orElseThrow(NoSuchElementException::new);
+
+        assertEquals(EventType.PATIENT_CREATED, pendingClient.getEventType());
+        assertEquals(response.id(), pendingClient.getAggregateId());
+    }
+
+    @Test
+    void shouldPublishPendingEvents(CapturedOutput output) throws Exception {
+
+        mockMvc.perform(post("/patients")
+                        .header("X-Tenant-Id", TENANT_A)
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                    {
+                                      "name": "CLIENT PENDING"
+                                    }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        List<OutboxEvent> pending = workerRepository.findPending();
+        assertEquals(1, pending.size());
+
+        OutboxEvent event = pending.getFirst();
+        assertNull(event.getPublishedAt());
+
+        outboxWorker.processPending();
+        List<OutboxEvent> remaining = workerRepository.findPending();
+        assertTrue(remaining.isEmpty());
+        assertThat(output.getOut()).contains("Publishing " + event.getId());
     }
 
 }
