@@ -12,7 +12,8 @@ public class OutboxWorker {
     private final EventPublisher eventPublisher;
     private final OutboxService outboxService;
 
-    public OutboxWorker(OutboxWorkerRepository repository, EventPublisher eventPublisher, OutboxService outboxService) {
+    public OutboxWorker(OutboxWorkerRepository repository,
+                        EventPublisher eventPublisher, OutboxService outboxService) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
         this.outboxService = outboxService;
@@ -27,7 +28,14 @@ public class OutboxWorker {
                 eventPublisher.publish(event);
                 event.setPublishedAt(Instant.now());
                 outboxService.save(event);
+            } catch (Exception e) {
+                event.incrementAttemptCount();
+                event.setLastError(e.getMessage());
+
+                outboxService.save(event);
+
             } finally {
+
                 TenantContext.clear();
             }
         });

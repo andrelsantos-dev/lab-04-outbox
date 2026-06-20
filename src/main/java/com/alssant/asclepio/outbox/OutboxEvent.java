@@ -32,6 +32,10 @@ public class OutboxEvent {
     private Instant createdAt;
     @Column
     private Instant publishedAt;
+    @Column(nullable = false, name = "attempt_count")
+    private Integer attemptCount = 0;
+    @Column
+    private String lastError;
 
     public UUID getId() {
         return id;
@@ -95,5 +99,25 @@ public class OutboxEvent {
 
     public void setPublishedAt(Instant publishedAt) {
         this.publishedAt = publishedAt;
+    }
+
+    public Integer getAttemptCount() {
+        return attemptCount;
+    }
+
+    public void setAttemptCount(Integer attemptCount) {
+        this.attemptCount = attemptCount;
+    }
+
+    public void incrementAttemptCount() {
+        this.attemptCount++;
+    }
+
+    public String getLastError() {
+        return lastError;
+    }
+
+    public void setLastError(String lastError) {
+        this.lastError = lastError;
     }
 }

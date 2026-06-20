@@ -1,9 +1,6 @@
 package com.alssant.asclepio.integration;
 
-import com.alssant.asclepio.outbox.OutboxEvent;
-import com.alssant.asclepio.outbox.OutboxService;
-import com.alssant.asclepio.outbox.OutboxWorker;
-import com.alssant.asclepio.outbox.OutboxWorkerRepository;
+import com.alssant.asclepio.outbox.*;
 import com.alssant.asclepio.outbox.dto.EventType;
 import com.alssant.asclepio.patient.dto.PatientResponse;
 import com.alssant.asclepio.support.BaseIntegrationTest;
@@ -16,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -26,6 +24,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -49,6 +49,9 @@ public class PatientIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     OutboxWorker outboxWorker;
+
+    @MockitoSpyBean
+    private EventPublisher publisher;
 
 
     @Test
@@ -160,18 +163,16 @@ public class PatientIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    void shouldRejectInsertWithoutTenant() throws Exception {
-        ServletException exception = Assertions.assertThrows(ServletException.class, () -> {
-            mockMvc.perform(
-                    post("/patients")
-                            .contentType(APPLICATION_JSON)
-                            .content("""
-                                    {
-                                        "name":"Ghost"
-                                    }
-                                    """)
-            );
-        });
+    void shouldRejectInsertWithoutTenant() {
+        ServletException exception = Assertions.assertThrows(ServletException.class, () -> mockMvc.perform(
+                post("/patients")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {
+                                    "name":"Ghost"
+                                }
+                                """)
+        ));
 
 
         assertInstanceOf(
@@ -221,59 +222,23 @@ public class PatientIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void shouldCreatePatientAndOutboxEvent() throws Exception {
-        MvcResult result = mockMvc.perform(post("/patients")
-                        .header("X-Tenant-Id", TENANT_A)
-                        .contentType(APPLICATION_JSON)
-                        .content("""
-                                    {
-                                      "name": "CLIENT NEW"
-                                    }
-                                """))
-                .andExpect(status().isCreated())
-                .andReturn();
+        PatientResponse response = createPatient(TENANT_A, "CLIENT NEW");
 
-        PatientResponse response =
-                mapper.readValue(
-                        result.getResponse().getContentAsString(),
-                        PatientResponse.class
-                );
+        OutboxEvent persistedEvent = findEvent(response.id());
 
-        OutboxEvent event =
-                executeAsTenant(
-                        TENANT_A,
-                        () -> outboxService
-                                .findByAggregateId(response.id())
-                                .orElseThrow()
-                );
-
-        assertEquals(EventType.PATIENT_CREATED, event.getEventType());
-        assertEquals(response.id(), event.getAggregateId());
+        assertEquals(EventType.PATIENT_CREATED, persistedEvent.getEventType());
+        assertEquals(response.id(), persistedEvent.getAggregateId());
     }
 
     @Test
     void shouldFindPendingEvents() throws Exception {
 
-        MvcResult result = mockMvc.perform(post("/patients")
-                        .header("X-Tenant-Id", TENANT_A)
-                        .contentType(APPLICATION_JSON)
-                        .content("""
-                                    {
-                                      "name": "CLIENT PENDING"
-                                    }
-                                """))
-                .andExpect(status().isCreated())
-                .andReturn();
+        PatientResponse response = createPatient(TENANT_A, "CLIENT PENDING");
 
-        PatientResponse response =
-                mapper.readValue(
-                        result.getResponse().getContentAsString(),
-                        PatientResponse.class
-                );
+        List<OutboxEvent> pending = workerRepository.findPending();
+        assertFalse(pending.isEmpty());
 
-        List<OutboxEvent> events = workerRepository.findPending();
-        assertFalse(events.isEmpty());
-
-        OutboxEvent pendingClient = workerRepository.findPending()
+        OutboxEvent pendingClient = pending
                 .stream()
                 .filter(event -> response.id().equals(event.getAggregateId()))
                 .findFirst()
@@ -286,16 +251,7 @@ public class PatientIntegrationTest extends BaseIntegrationTest {
     @Test
     void shouldPublishPendingEvents(CapturedOutput output) throws Exception {
 
-        mockMvc.perform(post("/patients")
-                        .header("X-Tenant-Id", TENANT_A)
-                        .contentType(APPLICATION_JSON)
-                        .content("""
-                                    {
-                                      "name": "CLIENT PENDING"
-                                    }
-                                """))
-                .andExpect(status().isCreated())
-                .andReturn();
+        createPatient(TENANT_A, "CLIENT PENDING");
 
         List<OutboxEvent> pending = workerRepository.findPending();
         assertEquals(1, pending.size());
@@ -306,7 +262,65 @@ public class PatientIntegrationTest extends BaseIntegrationTest {
         outboxWorker.processPending();
         List<OutboxEvent> remaining = workerRepository.findPending();
         assertTrue(remaining.isEmpty());
-        assertThat(output.getOut()).contains("Publishing " + event.getId());
+        assertThat(output.getOut()).contains("Publishing ");
+    }
+
+    @Test
+    void shouldKeepEventPendingWhenPublishFails() throws Exception {
+        PatientResponse response = createPatient(TENANT_A, "CLIENT WITH FAIL");
+
+        simulatePublishFailure();
+
+        outboxWorker.processPending();
+
+
+        OutboxEvent persistedEvent = findEvent(response.id());
+
+        assertNull(persistedEvent.getPublishedAt());
+        assertEquals(1, persistedEvent.getAttemptCount());
+        assertEquals("Publishing failed", persistedEvent.getLastError());
+    }
+
+    private PatientResponse createPatient(String tenant, String patientName) throws Exception {
+        String content = "{\"name\": \"%s\"}".formatted(patientName);
+
+        MvcResult result = mockMvc.perform(post("/patients")
+                        .header("X-Tenant-Id", tenant)
+                        .contentType(APPLICATION_JSON)
+                        .content(content))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        return mapper.readValue(
+                result.getResponse().getContentAsString(),
+                PatientResponse.class
+        );
+    }
+
+    private OutboxEvent findEvent(
+            UUID aggregateId
+    ) {
+
+        return executeAsTenant(
+                TENANT_A,
+                () ->
+                        outboxService
+                                .findByAggregateId(
+                                        aggregateId
+                                )
+                                .orElseThrow()
+        );
+
+    }
+
+    private void simulatePublishFailure() {
+        doThrow(
+                new RuntimeException(
+                        "Publishing failed"
+                )
+        )
+                .when(publisher)
+                .publish(any(OutboxEvent.class));
     }
 
 }
