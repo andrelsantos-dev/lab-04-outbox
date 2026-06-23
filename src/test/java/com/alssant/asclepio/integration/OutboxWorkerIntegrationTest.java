@@ -7,6 +7,7 @@ import com.alssant.asclepio.outbox.OutboxWorkerRepository;
 import com.alssant.asclepio.outbox.dto.EventType;
 import com.alssant.asclepio.patient.dto.PatientResponse;
 import com.alssant.asclepio.support.BaseIntegrationTest;
+import org.awaitility.Durations;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito;
@@ -17,17 +18,19 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.*;
 
 public class OutboxWorkerIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     OutboxWorkerRepository workerRepository;
 
-    @Autowired
+    @MockitoSpyBean
     OutboxWorker outboxWorker;
 
     @MockitoSpyBean
@@ -73,7 +76,9 @@ public class OutboxWorkerIntegrationTest extends BaseIntegrationTest {
 
     @Test
     void shouldKeepEventPendingWhenPublishFails() throws Exception {
-        PatientResponse response = createPatient(TENANT_A, "CLIENT PENDING");
+        final String patientName = "CLIENT_" + UUID.randomUUID();
+
+        PatientResponse response = createPatient(TENANT_A, patientName);
         simulatePublishFailure(outboxWorker::processPending);
 
         OutboxEvent persistedEvent = findEvent(response.id());
@@ -81,6 +86,19 @@ public class OutboxWorkerIntegrationTest extends BaseIntegrationTest {
         assertThat(persistedEvent.getPublishedAt()).isNull();
         assertThat(persistedEvent.getAttemptCount()).isEqualTo(1);
         assertThat(persistedEvent.getLastError()).isEqualTo("Publishing failed");
+    }
+
+    @Test
+    void shouldProcessPendingEventsAutomatically() throws Exception {
+        final String patientName = "CLIENT_" + UUID.randomUUID();
+
+        PatientResponse response = createPatient(TENANT_A, patientName);
+
+        await().atMost(Durations.TEN_SECONDS).untilAsserted(() -> {
+            verify(outboxWorker, atLeastOnce()).processPending();
+            OutboxEvent persistedEvent = findEvent(response.id());
+            assertThat(persistedEvent.getPublishedAt()).isNotNull();
+        });
     }
 
     protected void simulatePublishFailure(Runnable action) {

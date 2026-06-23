@@ -19,7 +19,8 @@ public class OutboxWorker {
         this.outboxService = outboxService;
     }
 
-    public void processPending() {
+
+    public  void processPending() {
         List<OutboxEvent> events = repository.findPending();
 
         events.forEach(event -> {
