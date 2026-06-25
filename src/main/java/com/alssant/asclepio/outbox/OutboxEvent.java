@@ -36,6 +36,12 @@ public class OutboxEvent {
     private Integer attemptCount = 0;
     @Column
     private String lastError;
+    @Column
+    private String failureReason;
+    @Column
+    private Instant failedAt;
+    @Column
+    private Boolean deadLetter;
 
     public UUID getId() {
         return id;
@@ -119,5 +125,29 @@ public class OutboxEvent {
 
     public void setLastError(String lastError) {
         this.lastError = lastError;
+    }
+
+    public String getFailureReason() {
+        return failureReason;
+    }
+
+    public void setFailureReason(String failureReason) {
+        this.failureReason = failureReason;
+    }
+
+    public Instant getFailedAt() {
+        return failedAt;
+    }
+
+    public void setFailedAt(Instant failedAt) {
+        this.failedAt = failedAt;
+    }
+
+    public Boolean getDeadLetter() {
+        return deadLetter;
+    }
+
+    public void setDeadLetter(Boolean deadLetter) {
+        this.deadLetter = deadLetter;
     }
 }

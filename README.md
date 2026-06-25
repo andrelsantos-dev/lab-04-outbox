@@ -2,24 +2,26 @@
 
 ## Overview
 
-This lab introduces the Transactional Outbox Pattern to guarantee consistency between database state changes and event publication.
+This lab implements the Transactional Outbox Pattern to guarantee consistency between database state changes and asynchronous event publication.
 
-The implementation builds on concepts explored in previous labs while simplifying unrelated components to keep focus on transactional consistency.
+The project evolves incrementally through multiple phases, introducing production-inspired reliability mechanisms while keeping the implementation focused and easy to understand.
 
 Goals:
 
 * Persist domain changes and integration events in the same transaction
 * Publish events asynchronously
 * Prevent event loss
-* Support idempotent event processing
-* Validate behavior using PostgreSQL and integration tests
+* Support retry-based processing
+* Guarantee idempotent event execution
+* Isolate permanently failing events using a Dead Letter Queue (DLQ)
+* Validate architectural behavior using PostgreSQL and integration tests
 
 ---
 
 ## Previous Labs
 
-* Lab 01 - Flyway + Testcontainers
-* Lab 02 - PostgreSQL Row Level Security
+* Lab 01 — Flyway + Testcontainers
+* Lab 02 — PostgreSQL Row Level Security
 * Lab 03 — Multi-Tenant System with PostgreSQL RLS
 
 ---
@@ -36,14 +38,18 @@ Goals:
 
 ## Current Scope
 
-Current foundation prepared for this lab:
+The current implementation includes a complete Transactional Outbox workflow:
 
-* Multi-tenant environment using PostgreSQL RLS
-* Patient module simplified for focused experimentation
-* Integration tests using PostgreSQL containers
-* Explicit datasource configuration
+* Transactional event persistence
+* Background worker processing
+* Automatic scheduler execution
+* Retry mechanism
+* Idempotent event processing
+* Dead Letter Queue (DLQ)
+* Multi-tenant support using PostgreSQL Row Level Security
+* Integration testing with PostgreSQL Testcontainers
 
-Future phases will introduce the Outbox implementation.
+Future phases will focus on external message brokers and production-oriented messaging infrastructure.
 
 ---
 
@@ -53,9 +59,33 @@ Future phases will introduce the Outbox implementation.
 src
 ├── patient
 ├── tenant
+├── outbox
 ├── config
 └── integration
 ```
+
+---
+
+## Architecture Evolution
+
+This lab is intentionally developed in incremental phases.
+
+Each phase documents:
+
+* Architectural decisions
+* Implementation details
+* Testing strategy
+* Lessons learned
+
+Current phases:
+
+* Phase 01 — Bootstrap
+* Phase 02 — Transactional Outbox Persistence
+* Phase 03 — Outbox Event Processing Worker
+* Phase 04 — Failure Handling and Retry
+* Phase 05 — Scheduler
+* Phase 06 — Idempotent Event Processing
+* Phase 07 — Dead Letter Queue (DLQ)
 
 ---
 
@@ -107,7 +137,9 @@ Examples explored in this repository include:
 * Transactional Outbox
 * Background processing
 * Scheduler execution
-* Retry and idempotency behavior
+* Retry handling
+* Idempotent processing
+* Dead Letter Queue (DLQ)
 
 Because these concerns emerge from component interaction, many scenarios are exercised end-to-end.
 
@@ -134,4 +166,3 @@ Typical production guidance:
 * End-to-end tests remain selective
 
 This repository intentionally leans toward integration testing to maximize learning and architectural visibility rather than optimize execution speed.
-

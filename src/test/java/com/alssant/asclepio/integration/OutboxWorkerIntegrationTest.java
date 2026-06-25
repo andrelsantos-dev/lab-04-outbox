@@ -1,6 +1,9 @@
 package com.alssant.asclepio.integration;
 
-import com.alssant.asclepio.outbox.*;
+import com.alssant.asclepio.outbox.EventPublisher;
+import com.alssant.asclepio.outbox.OutboxEvent;
+import com.alssant.asclepio.outbox.OutboxWorker;
+import com.alssant.asclepio.outbox.OutboxWorkerRepository;
 import com.alssant.asclepio.outbox.dto.EventType;
 import com.alssant.asclepio.outbox.idempotency.IdempotencyService;
 import com.alssant.asclepio.patient.dto.PatientResponse;
@@ -10,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -36,8 +40,9 @@ public class OutboxWorkerIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private IdempotencyService idempotencyService;
-    @Autowired
-    private OutboxService outboxService;
+
+    @Value("${worker.outbox.max-attempts}")
+    private int maxAttempts;
 
 
     @Test
@@ -133,6 +138,42 @@ public class OutboxWorkerIntegrationTest extends BaseIntegrationTest {
         assertThat(updatedEvent.getPublishedAt())
                 .as("already processed event should be removed from pending state")
                 .isNotNull();
+    }
+
+    @Test
+    void shouldKeepEventPendingBeforeMaxAttempts() throws Exception {
+        final String patientName = "CLIENT_" + UUID.randomUUID();
+        PatientResponse response = createPatient(TENANT_A, patientName);
+
+        simulatePublishFailure(() -> {
+            for (int i = 1; i < maxAttempts; i++) {
+                outboxWorker.processPending();
+            }
+        });
+
+        OutboxEvent persistedEvent = findEvent(response.id());
+
+        assertThat(persistedEvent.getPublishedAt()).isNull();
+        assertThat(persistedEvent.getFailedAt()).isNull();
+        assertThat(persistedEvent.getAttemptCount()).isEqualTo(maxAttempts - 1);
+    }
+
+    @Test
+    void shouldMoveEventToDeadLetterAfterMaxAttempts() throws Exception {
+        final String patientName = "CLIENT_" + UUID.randomUUID();
+        PatientResponse response = createPatient(TENANT_A, patientName);
+
+        // Simulate scheduler executions while the event is still eligible for retry.
+        for (int i = 1; i <= maxAttempts; i++) {
+            simulatePublishFailure(outboxWorker::processPending);
+        }
+
+        OutboxEvent persistedEvent = findEvent(response.id());
+
+        assertThat(persistedEvent.getPublishedAt()).isNull();
+        assertThat(persistedEvent.getFailedAt()).isNotNull();
+        assertThat(persistedEvent.getDeadLetter()).isTrue();
+        assertThat(persistedEvent.getAttemptCount()).isEqualTo(maxAttempts);
     }
 
     private void simulatePublishFailure(Runnable action) {

@@ -5,3 +5,4 @@ worker:
   outbox:
     enabled: true
     delay-ms: 2000
+    max-attempts: 3

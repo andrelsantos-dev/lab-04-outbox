@@ -2,10 +2,12 @@ package com.alssant.asclepio.outbox;
 
 import com.alssant.asclepio.outbox.idempotency.IdempotencyService;
 import com.alssant.asclepio.tenant.TenantContext;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class OutboxWorker {
@@ -13,15 +15,18 @@ public class OutboxWorker {
     private final EventPublisher eventPublisher;
     private final OutboxService outboxService;
     private final IdempotencyService idempotencyService;
+    private final Integer maxAttempts;
 
     public OutboxWorker(OutboxWorkerRepository repository,
                         EventPublisher eventPublisher,
                         OutboxService outboxService,
-                        IdempotencyService idempotencyService) {
+                        IdempotencyService idempotencyService,
+                        @Value("${worker.outbox.max-attempts}") Integer maxAttempts) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
         this.outboxService = outboxService;
         this.idempotencyService = idempotencyService;
+        this.maxAttempts = maxAttempts;
     }
 
 
@@ -52,6 +57,12 @@ public class OutboxWorker {
     private void markError(OutboxEvent event, Exception e) {
         event.incrementAttemptCount();
         event.setLastError(e.getMessage());
+
+        if (Objects.equals(event.getAttemptCount(), maxAttempts)) {
+            event.setFailureReason(event.getFailureReason());
+            event.setDeadLetter(true);
+            event.setFailedAt(Instant.now());
+        }
 
         outboxService.save(event);
     }
