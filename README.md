@@ -90,3 +90,48 @@ Integration tests that validate persisted data after HTTP requests may require o
 This happens because PostgreSQL Row Level Security relies on connection session state (`app.current_tenant`), while test assertions execute in a separate transaction and connection.
 
 For this reason, tests use a small helper (`executeAsTenant`) to recreate the tenant context for post-request validations.
+
+---
+
+## Testing Scope
+
+This project intentionally favors integration tests more heavily than a typical production application.
+
+The goal of the lab is educational: validate architectural behavior across multiple layers and make infrastructure concerns observable.
+
+Examples explored in this repository include:
+
+* Transaction boundaries
+* Row Level Security (RLS)
+* Tenant propagation
+* Transactional Outbox
+* Background processing
+* Scheduler execution
+* Retry and idempotency behavior
+
+Because these concerns emerge from component interaction, many scenarios are exercised end-to-end.
+
+### Production Considerations
+
+In a real-world application, the testing pyramid would typically favor more isolated tests:
+
+```text
+Unit Tests
+↑↑↑↑↑↑↑↑
+
+Service Tests
+↑↑↑
+
+Integration Tests
+↑
+```
+
+Typical production guidance:
+
+* Unit tests validate business rules
+* Service tests validate orchestration
+* Integration tests validate infrastructure boundaries
+* End-to-end tests remain selective
+
+This repository intentionally leans toward integration testing to maximize learning and architectural visibility rather than optimize execution speed.
+

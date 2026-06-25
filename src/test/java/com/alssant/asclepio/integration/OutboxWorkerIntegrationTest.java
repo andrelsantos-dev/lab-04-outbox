@@ -1,10 +1,8 @@
 package com.alssant.asclepio.integration;
 
-import com.alssant.asclepio.outbox.EventPublisher;
-import com.alssant.asclepio.outbox.OutboxEvent;
-import com.alssant.asclepio.outbox.OutboxWorker;
-import com.alssant.asclepio.outbox.OutboxWorkerRepository;
+import com.alssant.asclepio.outbox.*;
 import com.alssant.asclepio.outbox.dto.EventType;
+import com.alssant.asclepio.outbox.idempotency.IdempotencyService;
 import com.alssant.asclepio.patient.dto.PatientResponse;
 import com.alssant.asclepio.support.BaseIntegrationTest;
 import org.awaitility.Durations;
@@ -35,6 +33,11 @@ public class OutboxWorkerIntegrationTest extends BaseIntegrationTest {
 
     @MockitoSpyBean
     private EventPublisher publisher;
+
+    @Autowired
+    private IdempotencyService idempotencyService;
+    @Autowired
+    private OutboxService outboxService;
 
 
     @Test
@@ -101,7 +104,38 @@ public class OutboxWorkerIntegrationTest extends BaseIntegrationTest {
         });
     }
 
-    protected void simulatePublishFailure(Runnable action) {
+    @Test
+    void shouldMarkEventAsProcessed() throws Exception {
+        final String patientName = "CLIENT_" + UUID.randomUUID();
+
+        PatientResponse response = createPatient(TENANT_A, patientName);
+        outboxWorker.processPending();
+
+        OutboxEvent persistedEvent = findEvent(response.id());
+        Boolean processedEvent = idempotencyService.alreadyProcessed(persistedEvent.getId());
+
+        assertThat(persistedEvent.getPublishedAt()).isNotNull();
+        assertThat(processedEvent).isTrue();
+    }
+
+    @Test
+    void shouldSkipAlreadyProcessedEvent() throws Exception {
+        final String patientName = "CLIENT_" + UUID.randomUUID();
+
+        PatientResponse response = createPatient(TENANT_A, patientName);
+        OutboxEvent persistedEvent = findEvent(response.id());
+        idempotencyService.markProcessed(persistedEvent.getId());
+
+        outboxWorker.processPending();
+
+        Mockito.verify(publisher, never()).publish(any());
+        OutboxEvent updatedEvent = findEvent(response.id());
+        assertThat(updatedEvent.getPublishedAt())
+                .as("already processed event should be removed from pending state")
+                .isNotNull();
+    }
+
+    private void simulatePublishFailure(Runnable action) {
         try {
             doThrow(new RuntimeException("Publishing failed"))
                     .when(publisher)
