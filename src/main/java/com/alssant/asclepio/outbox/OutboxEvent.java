@@ -1,5 +1,6 @@
 package com.alssant.asclepio.outbox;
 
+import com.alssant.asclepio.outbox.dto.EventMetadata;
 import com.alssant.asclepio.outbox.dto.EventType;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
@@ -149,5 +150,11 @@ public class OutboxEvent {
 
     public void setDeadLetter(Boolean deadLetter) {
         this.deadLetter = deadLetter;
+    }
+
+    public EventMetadata eventMetadata() {
+        return new EventMetadata(this.eventType,
+                this.aggregateId,
+                this.aggregateType);
     }
 }

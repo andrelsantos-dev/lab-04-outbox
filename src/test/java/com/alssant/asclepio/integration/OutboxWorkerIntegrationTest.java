@@ -4,24 +4,27 @@ import com.alssant.asclepio.outbox.EventPublisher;
 import com.alssant.asclepio.outbox.OutboxEvent;
 import com.alssant.asclepio.outbox.OutboxWorker;
 import com.alssant.asclepio.outbox.OutboxWorkerRepository;
+import com.alssant.asclepio.outbox.dto.EventEnvelope;
+import com.alssant.asclepio.outbox.dto.EventMetadata;
 import com.alssant.asclepio.outbox.dto.EventType;
 import com.alssant.asclepio.outbox.idempotency.IdempotencyService;
 import com.alssant.asclepio.patient.dto.PatientResponse;
 import com.alssant.asclepio.support.BaseIntegrationTest;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.awaitility.Durations;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.system.CapturedOutput;
-import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,8 +44,14 @@ public class OutboxWorkerIntegrationTest extends BaseIntegrationTest {
     @Autowired
     private IdempotencyService idempotencyService;
 
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
     @Value("${worker.outbox.max-attempts}")
     private int maxAttempts;
+
+    @Value("${app.rabbitmq.queue}")
+    private String queueName;
 
 
     @Test
@@ -60,26 +69,6 @@ public class OutboxWorkerIntegrationTest extends BaseIntegrationTest {
 
         assertThat(pendingClient.getEventType()).isEqualTo(EventType.PATIENT_CREATED);
         assertThat(pendingClient.getAggregateId()).isEqualTo(response.id());
-    }
-
-    @Test
-    @ExtendWith(OutputCaptureExtension.class)
-    void shouldPublishPendingEvents(CapturedOutput output) throws Exception {
-
-        createPatient(TENANT_A, "CLIENT PENDING");
-
-        List<OutboxEvent> pending = workerRepository.findPending();
-        assertThat(pending).hasSize(1);
-
-        OutboxEvent event = pending.getFirst();
-        assertThat(event.getPublishedAt()).isNull();
-
-        outboxWorker.processPending();
-
-        List<OutboxEvent> remaining = workerRepository.findPending();
-        assertThat(remaining).isEmpty();
-
-        assertThat(output.getOut()).contains("Publishing ");
     }
 
     @Test
@@ -174,6 +163,43 @@ public class OutboxWorkerIntegrationTest extends BaseIntegrationTest {
         assertThat(persistedEvent.getFailedAt()).isNotNull();
         assertThat(persistedEvent.getDeadLetter()).isTrue();
         assertThat(persistedEvent.getAttemptCount()).isEqualTo(maxAttempts);
+    }
+
+    @Test
+    void shouldPublishMessageToRabbitExchange() throws Exception {
+        final String patientName = "CLIENT_" + UUID.randomUUID();
+        createPatient(TENANT_A, patientName);
+
+        List<OutboxEvent> pending = workerRepository.findPending();
+        assertThat(pending).hasSize(1);
+
+        OutboxEvent event = pending.getFirst();
+        assertThat(event.getPublishedAt()).isNull();
+
+        outboxWorker.processPending();
+
+        List<OutboxEvent> remaining = workerRepository.findPending();
+        assertThat(remaining).isEmpty();
+
+        await().atMost(5, SECONDS).untilAsserted(() -> {
+
+            EventEnvelope envelopeRecebido = rabbitTemplate.receiveAndConvert(
+                    queueName,
+                    new ParameterizedTypeReference<>() {
+                    }
+            );
+
+            assertThat(envelopeRecebido).isNotNull();
+
+            JsonNode payload = envelopeRecebido.payload();
+            EventMetadata metadata = envelopeRecebido.metadata();
+
+            assertThat(payload).isNotNull();
+            assertThat(metadata).isNotNull();
+
+            assertThat(payload.get("name").asText()).isEqualTo(patientName);
+            assertThat(metadata).usingRecursiveComparison().isEqualTo(event.eventMetadata());
+        });
     }
 
     private void simulatePublishFailure(Runnable action) {

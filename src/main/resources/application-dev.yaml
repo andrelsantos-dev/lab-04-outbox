@@ -20,6 +20,11 @@ spring:
         show_sql: true
     hibernate:
       ddl-auto: validate
+  rabbitmq:
+    host: "localhost"
+    port: 5672
+    username: "admin"
+    password: "secret"
 worker:
   datasource:
     username: worker_user
@@ -28,3 +33,8 @@ worker:
     enabled: true
     delay-ms: 5000
     max-attempts: 3
+app:
+  rabbitmq:
+    exchange: "asclepio.events"
+    queue: "patient.events.queue"
+    binding-pattern: "patient.#"
