@@ -1,4 +1,4 @@
-package com.alssant.asclepio.integration;
+package com.alssant.asclepio.support;
 
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;

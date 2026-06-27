@@ -1,6 +1,5 @@
 package com.alssant.asclepio.support;
 
-import com.alssant.asclepio.integration.AbstractPostgresContainer;
 import com.alssant.asclepio.outbox.OutboxEvent;
 import com.alssant.asclepio.outbox.OutboxService;
 import com.alssant.asclepio.patient.dto.PatientResponse;
@@ -9,9 +8,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.junit.jupiter.Container;
 
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -27,6 +29,15 @@ public abstract class BaseIntegrationTest extends AbstractPostgresContainer {
     protected static final String TENANT_A = "11111111-1111-1111-1111-111111111111";
     protected static final String TENANT_B = "22222222-2222-2222-2222-222222222222";
 
+    @Container
+    @ServiceConnection
+    static final RabbitMQContainer RABBITMQ =
+            new RabbitMQContainer("rabbitmq:4.3-management-alpine");
+
+    static {
+        RABBITMQ.start();
+    }
+
     @Autowired
     protected MockMvc mockMvc;
 
@@ -34,7 +45,7 @@ public abstract class BaseIntegrationTest extends AbstractPostgresContainer {
     protected ObjectMapper mapper;
 
     @Autowired
-    OutboxService outboxService;
+    protected OutboxService outboxService;
 
     protected <T> T executeAsTenant(String tenantId, Supplier<T> action) {
         try {
