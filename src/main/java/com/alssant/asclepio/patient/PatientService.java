@@ -50,7 +50,7 @@ public class PatientService {
         outboxService
                 .record(
                         new PatientCreatedEvent(p.getId(), p.getName()),
-                        new EventMetadata(EventType.PATIENT_CREATED, p.getId(), "PATIENT"));
+                        new EventMetadata(EventType.PATIENT_CREATED, p.getId(), "PATIENT", null));
 
         return new PatientResponse(
                 p.getId(),

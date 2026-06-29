@@ -86,6 +86,8 @@ Current phases:
 * Phase 05 — Scheduler
 * Phase 06 — Idempotent Event Processing
 * Phase 07 — Dead Letter Queue (DLQ)
+* Phase 08 — RabbitMQ Integration
+* Phase 09 — RabbitMQ Consumer
 
 ---
 

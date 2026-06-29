@@ -5,6 +5,7 @@ import java.util.UUID;
 public record EventMetadata(
         EventType eventType,
         UUID aggregateId,
-        String aggregateType
+        String aggregateType,
+        UUID tenantId
 ) {
 }
