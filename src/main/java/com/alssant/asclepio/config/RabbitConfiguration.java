@@ -2,39 +2,67 @@ package com.alssant.asclepio.config;
 
 import org.springframework.amqp.core.*;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 @Configuration
+@EnableConfigurationProperties(RabbitProperties.class)
 public class RabbitConfiguration {
-    @Value("${app.rabbitmq.exchange}")
-    private String exchangeName;
+    private final RabbitProperties properties;
 
-    @Value("${app.rabbitmq.queue}")
-    private String queueName;
-
-    @Value("${app.rabbitmq.binding-pattern}")
-    private String bindingPattern;
-
-    @Bean
-    public TopicExchange topicExchange() {
-        return new TopicExchange(exchangeName);
+    public RabbitConfiguration(RabbitProperties properties) {
+        this.properties = properties;
     }
 
     @Bean
+    @Primary
+    public TopicExchange topicExchange() {
+        return new TopicExchange(properties.exchange());
+    }
+
+    @Bean
+    @Primary
     public Queue queue() {
         return QueueBuilder
-                .durable(queueName)
+                .durable(properties.queue())
+                .deadLetterExchange(properties.deadLetterExchange())
+                .deadLetterRoutingKey(properties.deadLetterRoutingKey())
                 .build();
     }
 
     @Bean
-    public Binding bindingPatient(Queue patientQueue, TopicExchange patientExchange) {
+    public Binding bindingPatient(
+            Queue patientQueue,
+            TopicExchange patientExchange) {
         return BindingBuilder
                 .bind(patientQueue)
                 .to(patientExchange)
-                .with(bindingPattern);
+                .with(properties.bindingPattern());
+    }
+
+    @Bean("deadLetterExchange")
+    public TopicExchange deadLetterExchange() {
+        return new TopicExchange(properties.deadLetterExchange());
+    }
+
+    @Bean("deadLetterQueue")
+    public Queue deadLetterQueue() {
+        return QueueBuilder
+                .durable(properties.deadLetterQueue())
+                .build();
+    }
+
+    @Bean("bindingDeadLetterPatient")
+    public Binding bindingDeadLetterPatient(
+            @Qualifier("deadLetterQueue") Queue deadLetterQueue,
+            @Qualifier("deadLetterExchange") TopicExchange deadLetterExchange) {
+        return BindingBuilder
+                .bind(deadLetterQueue)
+                .to(deadLetterExchange)
+                .with(properties.deadLetterRoutingKey());
     }
 
     @Bean

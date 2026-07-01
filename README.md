@@ -1,20 +1,21 @@
-# Lab 04 — Outbox Pattern (Asclépio)
+# Lab 04 — Transactional Outbox & RabbitMQ (Asclépio)
 
 ## Overview
 
-This lab implements the Transactional Outbox Pattern to guarantee consistency between database state changes and asynchronous event publication.
+This lab implements the Transactional Outbox Pattern together with RabbitMQ to demonstrate reliable asynchronous communication in a multi-tenant application.
 
 The project evolves incrementally through multiple phases, introducing production-inspired reliability mechanisms while keeping the implementation focused and easy to understand.
 
 Goals:
 
-* Persist domain changes and integration events in the same transaction
-* Publish events asynchronously
-* Prevent event loss
-* Support retry-based processing
-* Guarantee idempotent event execution
-* Isolate permanently failing events using a Dead Letter Queue (DLQ)
-* Validate architectural behavior using PostgreSQL and integration tests
+* Persist domain changes and integration events within the same transaction
+* Publish integration events asynchronously through RabbitMQ
+* Consume events reliably
+* Handle transient and permanent consumer failures
+* Prevent message loss across producer and consumer
+* Guarantee idempotent processing where appropriate
+* Preserve tenant isolation during asynchronous execution
+* Validate architectural behavior using PostgreSQL, RabbitMQ and end-to-end integration tests
 
 ---
 
@@ -22,7 +23,7 @@ Goals:
 
 * Lab 01 — Flyway + Testcontainers
 * Lab 02 — PostgreSQL Row Level Security
-* Lab 03 — Multi-Tenant System with PostgreSQL RLS
+* Lab 03 — Spring Multi-Tenancy with PostgreSQL RLS
 
 ---
 
@@ -31,6 +32,7 @@ Goals:
 * Java 21
 * Spring Boot
 * PostgreSQL
+* RabbitMQ
 * Flyway
 * Testcontainers
 
@@ -38,18 +40,19 @@ Goals:
 
 ## Current Scope
 
-The current implementation includes a complete Transactional Outbox workflow:
+The current implementation covers a complete event-driven workflow:
 
-* Transactional event persistence
+* Transactional Outbox persistence
 * Background worker processing
-* Automatic scheduler execution
-* Retry mechanism
-* Idempotent event processing
+* Scheduled event publication
+* Retry and failure handling
+* Idempotent processing
+* RabbitMQ publisher
+* RabbitMQ consumer
+* Consumer retry and redelivery
 * Dead Letter Queue (DLQ)
 * Multi-tenant support using PostgreSQL Row Level Security
-* Integration testing with PostgreSQL Testcontainers
-
-Future phases will focus on external message brokers and production-oriented messaging infrastructure.
+* End-to-end integration testing with PostgreSQL and RabbitMQ Testcontainers
 
 ---
 
@@ -57,11 +60,43 @@ Future phases will focus on external message brokers and production-oriented mes
 
 ```text
 src
+├── audit
+├── config
+├── consumer
+├── outbox
 ├── patient
 ├── tenant
-├── outbox
-├── config
 └── integration
+```
+
+---
+
+## Architecture Overview
+
+```text
+HTTP Request
+      │
+      ▼
+Patient Service
+      │
+      ▼
+Database Transaction
+      │
+      ├──────────────► Patient
+      │
+      └──────────────► Outbox
+                           │
+                           ▼
+                     Outbox Worker
+                           │
+                           ▼
+                      RabbitMQ
+                           │
+                           ▼
+                    Rabbit Consumer
+                           │
+                           ▼
+                     Audit Entries
 ```
 
 ---
@@ -85,21 +120,22 @@ Current phases:
 * Phase 04 — Failure Handling and Retry
 * Phase 05 — Scheduler
 * Phase 06 — Idempotent Event Processing
-* Phase 07 — Dead Letter Queue (DLQ)
-* Phase 08 — RabbitMQ Integration
+* Phase 07 — Outbox Dead Letter Queue
+* Phase 08 — RabbitMQ Publisher
 * Phase 09 — RabbitMQ Consumer
+* Phase 10 — Consumer Failure Handling
 
 ---
 
-## Run locally
+## Run Locally
 
-Start local infrastructure:
+Start the local infrastructure:
 
 ```bash
 make up
 ```
 
-Run the application using the `dev` profile:
+Run the application using the development profile:
 
 ```bash
 make dev
@@ -112,38 +148,44 @@ make dev
 * Labs are self-contained and concept-oriented
 * Simplicity over framework abstraction
 * Real integration tests over mocks
-* Database as source of truth
+* Infrastructure as part of the design
+* Database as the source of truth
 * Progressive architecture evolution
-
-### Testing with RLS
-
-Integration tests that validate persisted data after HTTP requests may require opening a new tenant context.
-
-This happens because PostgreSQL Row Level Security relies on connection session state (`app.current_tenant`), while test assertions execute in a separate transaction and connection.
-
-For this reason, tests use a small helper (`executeAsTenant`) to recreate the tenant context for post-request validations.
 
 ---
 
-## Testing Scope
+## Testing with RLS
 
-This project intentionally favors integration tests more heavily than a typical production application.
+Integration tests that validate persisted data after HTTP requests may require opening a new tenant context.
 
-The goal of the lab is educational: validate architectural behavior across multiple layers and make infrastructure concerns observable.
+PostgreSQL Row Level Security relies on the connection session state (`app.current_tenant`), while test assertions execute using a different transaction and database connection.
 
-Examples explored in this repository include:
+For this reason, tests use a small helper (`executeAsTenant`) to recreate the tenant context before performing assertions.
+
+---
+
+## Testing Strategy
+
+This project intentionally favors end-to-end integration tests more heavily than a typical production application.
+
+The objective of the lab is educational: validate architectural behavior across multiple layers and make infrastructure concerns observable.
+
+The integration test suite covers scenarios such as:
 
 * Transaction boundaries
-* Row Level Security (RLS)
-* Tenant propagation
+* PostgreSQL Row Level Security (RLS)
+* Tenant context propagation
 * Transactional Outbox
-* Background processing
+* Background worker execution
 * Scheduler execution
 * Retry handling
 * Idempotent processing
-* Dead Letter Queue (DLQ)
+* RabbitMQ publishing
+* RabbitMQ consumption
+* Consumer redelivery
+* Dead Letter Queue routing
 
-Because these concerns emerge from component interaction, many scenarios are exercised end-to-end.
+Because these concerns emerge from the interaction between application and infrastructure, most scenarios are validated end-to-end.
 
 ### Production Considerations
 
@@ -167,4 +209,4 @@ Typical production guidance:
 * Integration tests validate infrastructure boundaries
 * End-to-end tests remain selective
 
-This repository intentionally leans toward integration testing to maximize learning and architectural visibility rather than optimize execution speed.
+This repository intentionally emphasizes integration testing to maximize learning, validate architectural behavior, and demonstrate real infrastructure interactions rather than optimize execution time.

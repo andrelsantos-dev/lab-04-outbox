@@ -10,3 +10,6 @@ app:
     exchange: "asclepio.events"
     queue: "patient.events.queue"
     binding-pattern: "patient.#"
+    dead-letter-exchange: "asclepio.events.dlx"
+    dead-letter-queue: "patient.events.dlq"
+    dead-letter-routingKey: "patient.error"
