@@ -1,5 +1,11 @@
 # Lab 04 — Transactional Outbox & RabbitMQ (Asclépio)
 
+![Java](https://img.shields.io/badge/Java_21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot_3.5-6DB33F?style=for-the-badge&logo=spring&logoColor=white)
+![RabbitMQ](https://img.shields.io/badge/RabbitMQ_4.3-FF6600?style=for-the-badge&logo=rabbitmq&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL_17-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![Testcontainers](https://img.shields.io/badge/Testcontainers-2496ED?style=for-the-badge&logo=testcontainers&logoColor=white)
+
 ## Overview
 
 This lab implements the Transactional Outbox Pattern together with RabbitMQ to demonstrate reliable asynchronous communication in a multi-tenant application.
